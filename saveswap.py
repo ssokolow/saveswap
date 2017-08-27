@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""N64 save memory byte-swapping tool
-
+"""
 A simple utility to translate among the SRAM/EEPROM/Flash dump formats for
 Nintendo 64 cartridges as supported by various dumpers, emulators, and flash
 cartridges.
@@ -270,10 +269,19 @@ def main():
         description=__doc__.replace('\r\n', '\n').split('\n--snip--\n')[0],
         epilog=textwrap.dedent("""
             The swap modes behave as follows:
+                    both: 12 34 -> 43 21
+              bytes-only: 12 34 -> 21 43
+              words-only: 12 34 -> 34 12
 
-                      both: 12 34 -> 43 21
-                bytes-only: 12 34 -> 21 43
-                words-only: 12 34 -> 34 12
+            The valid padding sizes for N64 save dumps are as follows:
+              ===== EEPROM =====
+                  512 (  4kbit)
+                 2048 ( 16kbit)
+              ====== SRAM ======
+                32768 (256kbit)
+               131072 (  1Mbit)
+              ===== Flash ======
+               131072 (  1Mbit)
             """))
 
     parser.add_argument('--version', action='version',
