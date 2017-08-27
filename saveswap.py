@@ -385,6 +385,13 @@ def test_byteswap(tmpdir):
         byteswap(str(test_file), **options)
         assert test_file.read() == expected * 10
 
+def test_byteswap_padding(tmpdir):
+    """Test that byteswap pads as intended"""
+    test_file = tmpdir.join("fake_dump")
+    test_file.write("1234" * 100000)
+    process_path(str(test_file), pad_to=500000)
+    assert test_file.read() == ("4321" * 100000) + ("\x00" * 100000)
+
 def test_byteswap_with_incomplete(tmpdir):
     """Test that byteswap reacts properly to file sizes with remainders
 
@@ -411,6 +418,66 @@ def test_byteswap_with_incomplete(tmpdir):
 
     # Let _vary_check_swap_inputs call test_callback once for each combination
     _vary_check_swap_inputs(test_callback)
+
+def test_process_path(tmpdir):
+    """Test that process_path reacts to padding arguments properly"""
+    import pytest
+    test_file = tmpdir.join("fake_dump")
+
+    test_file.write("1234" * 100000)
+    with pytest.raises(FileTooBig):
+        process_path(str(test_file), pad_to=None)
+    assert test_file.read() == "1234" * 100000  # Unchanged on error
+
+    test_file.write("1234" * 100000)
+    process_path(str(test_file), pad_to=0)
+    assert test_file.read() == "4321" * 100000
+
+    test_file.write("1234" * 100000)
+    process_path(str(test_file), pad_to=500000)
+    assert test_file.read() == ("4321" * 100000) + ("\x00" * 100000)
+
+def check_main_retcode(code):
+    """Helper for testing return codes from main()"""
+    try:
+        main()
+    except SystemExit as err:
+        assert err.code == code
+    else:
+        assert False, "main() should have called sys.exit({})".format(code)
+
+def test_main_works(tmpdir):
+    """Functional test for main() functioning"""
+    test_file = tmpdir.join("fake_dump")
+    old_argv = sys.argv
+
+    # Test successful runs
+    for pat_reps, options, expect_pat, expect_len in (
+            (500, [], '4321', 2048),
+            (100, ['--swap-mode=words-only'], '3412', 512),
+            (1000, ['--swap-mode=bytes-only'], '2143', 32768),
+            (1000, ['--force-padding=0',
+                    '--swap-mode=bytes-only'], '2143', 4000),
+            (100000, ['--force-padding=500000'], '4321', 500000)):
+        sys.argv = [old_argv[0]] + options + [str(test_file)]
+        test_file.write("1234" * pat_reps)
+        main()
+        assert test_file.read() == (expect_pat * pat_reps) + (
+            "\x00" * (expect_len - (4 * pat_reps)))
+
+    # Test error returns
+    sys.argv = [old_argv[0], str(tmpdir.join("missing_file"))]
+    check_main_retcode(1)
+
+    test_file.write("1234" * 100000)  # Too big
+    sys.argv = [old_argv[0], str(test_file)]
+    check_main_retcode(2)
+
+    test_file.write("12345")          # Not evenly disible by 2
+    sys.argv = [old_argv[0], str(test_file)]
+    check_main_retcode(3)
+
+    sys.argv = old_argv
 
 def _vary_check_swap_inputs(callback):
     """Helper to avoid duplicating stuff within test_byteswap_with_incomplete
