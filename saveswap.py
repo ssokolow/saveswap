@@ -240,12 +240,25 @@ def swap_bytes(path, swap_bytes=True, swap_words=True, pad_to=0):
     with open(path, 'wb') as fobj_out:
         fobj_out.write(data)
 
+def process_path(path, swap_bytes=True, swap_words=True, pad_to=None):
+    """Do all necessary swapping and padding for a single file.
+
+    This is separated out from `main` because it's good convention to
+    keep your "handle one file" code in a function of its own so
+    main() is all about processing the command-line input.
+    """
+    if pad_to is None:  # "None" means "Nothing specified. Guess."
+        pad_to = calculate_padding(path)
+    elif not pad_to:    # Anything else False-y (eg. 0) means "No padding."
+        pad_to = 0
+
+    swap_bytes(path, swap_bytes, swap_words, pad_to)
+
 def main():
     """The main entry point, compatible with setuptools entry points."""
     # If we're running on Python 2, take responsibility for preventing
     # output from causing UnicodeEncodeErrors. (Done here so it should only
     # happen when not being imported by some other program.)
-    import sys
     if sys.version_info.major < 3:
         reload(sys)
         sys.setdefaultencoding('utf-8')  # pylint: disable=no-member
@@ -292,15 +305,12 @@ def main():
     logging.basicConfig(level=log_levels[args.verbose],
                         format='%(levelname)s: %(message)s')
 
+    # Adapt the external interface to the internal one and process each file
     for path in args.path:
-        if args.pad_to:
-            pad_to = args.pad_to
-        elif args.pad_to is None:
-            pad_to = calculate_padding(path)
-        else:
-            pad_to = 0
-
-        swap_bytes(path, args.swap_bytes, args.swap_words, pad_to)
+        process_path(path,
+            args.swap_mode in ('both', 'bytes-only'),
+            args.swap_mode in ('both', 'words-only'),
+            args.pad_to)
 
 # --== Test cases (run using `py.test saveswap.py`) ==--
 # (They rely on helpers like `tmpdir` provided by py.test)
