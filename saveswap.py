@@ -15,6 +15,8 @@ The purpose of this tool is to achieve the following additional goals:
 1. Be scriptable
 2. Also run on non-Windows platforms
 3. Don't trigger false positives for malware on VirusTotal.com
+4. Be a very well-documented example for anyone who might want to switch
+   from AutoIt to Python for this sort of tool.
 
 I have chosen the name "N64-Saveswap" in recognition that the EverDrive 64
 is not the only piece of hardware which may require the use of this tool
@@ -82,25 +84,35 @@ class FileIncomplete(Exception):
     """Exception raised for files not a multiple of the swap increment."""
 
 def rejoin_bytes(sequence):
-    """Workaround for b''.join() not accepting the output of iterating bytes
-    objects in Python 3.x and bytes(sequence) not having the desired effect
-    in Python 2.x.
+    """Create a bytestring from whatever you get by iterating on one.
+
+    This is a workaround for the following situation:
+
+        1. In Python 2.7, iterating on a bytestring will give you a sequence of
+           characters, which you rejoin with ``b''.join(sequence)`` and calling
+           ``bytes([65 , 66, 67])`` gives you a string containing
+           ``[65, 66, 67]``.
+
+        2. In Python 3.x, iterating on a bytestring will give you a sequence of
+           integers, which you rejoin with ``bytes(sequence)`` and
+           ``b''.join(sequence)`` will raise an error because it doesn't know
+           how to join integers.
 
     ...just be thankful I didn't get fed up enough to use
     .decode('latin1') and .encode('latin1') to side-step it by pretending that
     the Unicode codepoints corresponding to the latin-1 encoding are raw byte
     values.
 
-    (Not a good idea if you can avoid it, because it wastes memory supporting
+    (Not a good idea, if you can avoid it, because it wastes memory supporting
      values you'll never use, wastes CPU time converting both ways, and, if you
      pick an encoding that can't represent all 256 possible byte values or
      accidentally introduce Unicode values that can't be mapped back, you'll
      set yourself up for unpleasant surprises.)
     """
     if sys.version_info.major < 3:
-        return b''.join(sequence)
+        return b''.join(sequence)  # Python 2.7
     else:
-        return bytes(sequence)
+        return bytes(sequence)     # Python 3.x and beyond
 
 def calculate_padding(path):
     """Calculate the size that a dump file should be padded to.
@@ -180,15 +192,19 @@ def swap_bytes(path, swap_bytes=True, swap_words=True, pad_to=0):
     #       becomes
     #     [["4","3","2","1"], ["4","3","2","1"], ["4","3","2","1"]]
     #
+    #   rejoin_bytes() turns a list of bytes into a bytestring.
+    #
     #   b''.join() turns a list of bytestrings into a single bytestring,
     #   using "nothing" as the separator. ('' and "" are interchangeable)
     #     ["4", "3", "2", "1"] -> "4321"
     #
-    #   The whole line is a "list comprehension" and is equivalent to:
+    #   Things of the form ``output = [something for x in data]`` are
+    #   "list comprehensions" and what you see is shorthand for:
     #     output2 = []
     #     for x in output:
-    #         output2.append(b''.join(x))
+    #         output2.append(rejoin_bytes(x))
     #     output = b''.join(output2)
+    #     del output2
     #
     # TODO: Are these files ALWAYS supposed to be multiples of 4 bytes when
     #       dumped? If so, I should enforce that unconditionally to catch
