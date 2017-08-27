@@ -163,18 +163,12 @@ def byteswap(path, swap_bytes=True, swap_words=True, pad_to=0):
         If specified, append null bytes before writing to ensure the file is
         at least this length.
 
-    :raises TypeError: The value of ``path`` cannot be concatenated.
+    :raises TypeError: The value of ``path`` is not a string.
     :raises IOError: Failure when attempting to read/write a file.
     :raises FileIncomplete:
         The length of the file isn't a multiple of the requested swapping
         increment.
     """
-    bak_path = path + '.bak'
-
-    # Don't get fancy. Just let a well-tested routine make our backup
-    # (copy2 also preserves metadata like modification date)
-    shutil.copy2(path, bak_path)
-
     # Given how small these are, let's just load the entire thing into memory,
     # manipulate it there, and then write the whole thing out again.
     #
@@ -243,22 +237,37 @@ def byteswap(path, swap_bytes=True, swap_words=True, pad_to=0):
     with open(path, 'wb') as fobj_out:
         fobj_out.write(data)
 
-def process_path(path, swap_bytes=True, swap_words=True, pad_to=None):
-    # type: (str, bool, bool, int) -> None
+def process_path(path, swap_bytes=True, swap_words=True, pad_to=None,
+                 make_backup=True):
     """Do all necessary swapping and padding for a single file.
 
     This is separated out from `main` because it's good convention to
     keep your "handle one file" code in a function of its own so
     main() is all about processing the command-line input.
 
-    See `byteswap` for argument documentation and additional exceptions raised.
+    See `byteswap` for additional argument documentation and exceptions raised.
 
+    :Parameters:
+      make_backup : `bool`
+        If `True`, generate a backup file by appending `.bak` to the path.
+        This will happen after detecting oversize files but before performing
+        any actual work.
+
+    :raises TypeError: The value of ``path`` is not a string.
+    :raises IOError: Failure when attempting to read/write a file.
     :raises OSError: ``path`` does not exist (with ``pad_to=None``)
     """
     if pad_to is None:  # "None" means "Nothing specified. Guess."
         pad_to = calculate_padding(path)
     elif not pad_to:    # Anything else False-y (eg. 0) means "No padding."
         pad_to = 0
+
+    if make_backup:
+        bak_path = path + '.bak'
+
+        # Don't get fancy. Just let a well-tested routine make our backup
+        # (copy2 also preserves metadata like modification date)
+        shutil.copy2(path, bak_path)
 
     byteswap(path, swap_bytes, swap_words, pad_to)
 
@@ -316,6 +325,11 @@ def main():  # type: () -> None
         help="Override autodetected padding size. This also disables the "
              " associated safety checks, allowing this tool to be used on "
              " other types of files. Specify 0 to disable padding entirely.")
+    parser.add_argument('--no-backup', action="store_false", dest="backup",
+        default=True,
+        help="Disable creation of an automatic backup. This is intended to "
+            "be used by scripts which want more control over whether and "
+            "where backups are created.")
     parser.add_argument('path', nargs='+',
         help="One or more Nintendo 64 save memory dumps to byte-swap")
 
@@ -335,10 +349,11 @@ def main():  # type: () -> None
     for path in args.path:
         log.info("Processing %s...", path)
         try:
-            process_path(path,
-                args.swap_mode in ('both', 'bytes-only'),
-                args.swap_mode in ('both', 'words-only'),
-                args.pad_to)
+            process_path(path=path,
+                swap_bytes=args.swap_mode in ('both', 'bytes-only'),
+                swap_words=args.swap_mode in ('both', 'words-only'),
+                pad_to=args.pad_to,
+                make_backup=args.backup)
 
         # Return the most serious error code we encountered
         except (IOError, OSError) as err:
