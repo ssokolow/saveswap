@@ -306,45 +306,39 @@ def main():
 # (They rely on helpers like `tmpdir` provided by py.test)
 
 def test_calculate_padding(tmpdir):
-    """calculate_padding works as expected"""
+    """Test that calculate_padding works as expected"""
     import pytest
     test_file = tmpdir.join("fake_dump")
 
-    test_file.write("1234" * 100)
-    assert calculate_padding(str(test_file)) == 512
-    test_file.write("1234" * 500)
-    assert calculate_padding(str(test_file)) == 2048
-    test_file.write("1234" * 1000)
-    assert calculate_padding(str(test_file)) == 32768
-    test_file.write("1234" * 10000)
-    assert calculate_padding(str(test_file)) == 131072
+    for start, expected in (
+            (100, 512), (500, 2048), (1000, 32768), (10000, 131072)):
+        test_file.write("1234" * start)
+        assert calculate_padding(str(test_file)) == expected
 
     test_file.write("1234" * 100000)
     with pytest.raises(FileTooBig):
         calculate_padding(str(test_file))
 
 def test_swap_bytes(tmpdir):
+    """Test that swap_bytes produces the expected output"""
     import pytest
     test_file = tmpdir.join("fake_dump")
 
-    test_file.write("1234" * 10)
-    swap_bytes(str(test_file))
-    assert test_file.read() == "4321" * 10
-
-    test_file.write("1234" * 10)
-    swap_bytes(str(test_file), swap_bytes=False)
-    assert test_file.read() == "3412" * 10
-
-    test_file.write("1234" * 10)
-    swap_bytes(str(test_file), swap_words=False)
-    assert test_file.read() == "2143" * 10
-
-    test_file.write("1234" * 10)
-    swap_bytes(str(test_file), swap_bytes=False, swap_words=False)
-    assert test_file.read() == "1234" * 10
+    # Test the various modes
+    for options, expected in (
+            ({}, "4321"),
+            ({'swap_bytes': False}, "3412"),
+            ({'swap_words': False}, "2143"),
+            ({'swap_bytes': False, 'swap_words': False}, "1234")):
+        test_file.write("1234" * 10)
+        swap_bytes(str(test_file), **options)
+        assert test_file.read() == expected * 10
 
 def test_swap_bytes_with_incomplete(tmpdir):
-    """swap_bytes reacts properly to file sizes with remainders"""
+    """Test that swap_bytes reacts properly to file sizes with remainders
+
+    (ie. file sizes that are not evenly divisible by 2 or 4)
+    """
     import pytest
     test_file = tmpdir.join("fake_dump")
 
@@ -369,7 +363,11 @@ def test_swap_bytes_with_incomplete(tmpdir):
     _vary_check_swap_inputs(test_callback)
 
 def _vary_check_swap_inputs(callback):
-    """Helper to avoid duplicating stuff common between test_swap_bytes*"""
+    """Helper to avoid duplicating stuff within test_swap_bytes_with_incomplete
+
+    You want to be careful about this, because the number of tests run goes up
+    exponentially, but with small numbers of combinations, it's very useful.
+    """
     for _bytes in (True, False):
         for _words in (True, False):
             for _padding in (0, 1000, 2048):
