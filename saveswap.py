@@ -64,7 +64,7 @@ from __future__ import (absolute_import, division, print_function,
 __author__ = "Stephan Sokolow"
 __license__ = "MIT"
 __appname__ = "N64-Saveswap"
-__version__ = "0.0pre0"
+__version__ = "0.1"
 
 # A list of valid dump sizes, used for safety checks and padding
 VALID_SIZES = [512, 2048, 32768, 131072]
