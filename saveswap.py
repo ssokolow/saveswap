@@ -250,6 +250,10 @@ def process_path(path, swap_bytes=True, swap_words=True, pad_to=None):
     This is separated out from `main` because it's good convention to
     keep your "handle one file" code in a function of its own so
     main() is all about processing the command-line input.
+
+    See `byteswap` for argument documentation and additional exceptions raised.
+
+    :raises OSError: ``path`` does not exist (with ``pad_to=None``)
     """
     if pad_to is None:  # "None" means "Nothing specified. Guess."
         pad_to = calculate_padding(path)
@@ -326,8 +330,8 @@ def main():  # type: () -> None
             args.swap_mode in ('both', 'words-only'),
             args.pad_to)
 
-# --== Test cases (run using `py.test saveswap.py`) ==--
-# (They rely on helpers like `tmpdir` provided by py.test)
+# ---=== Test cases (run using `py.test saveswap.py`) ===---
+#  (They rely on helpers like `tmpdir` provided by py.test)
 
 def test_calculate_padding(tmpdir):
     """Test that calculate_padding works as expected"""
