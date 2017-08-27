@@ -292,6 +292,13 @@ def main():  # type: () -> None
                131072 (  1Mbit)
               ===== Flash ======
                131072 (  1Mbit)
+
+            For scripting purposes, the exit code will indicate the most
+            serious error encountered, with the following meanings:
+               0 = Success
+              10 = Could not read file / Could not write backup
+              20 = File is too large to be an N64 save dump
+              30 = File size is not a multiple of the requested swap increment
             """))
 
     parser.add_argument('--version', action='version',
@@ -324,11 +331,28 @@ def main():  # type: () -> None
                         format='%(levelname)s: %(message)s')
 
     # Adapt the external interface to the internal one and process each file
+    retcode = 0
     for path in args.path:
-        process_path(path,
-            args.swap_mode in ('both', 'bytes-only'),
-            args.swap_mode in ('both', 'words-only'),
-            args.pad_to)
+        log.info("Processing %s...", path)
+        try:
+            process_path(path,
+                args.swap_mode in ('both', 'bytes-only'),
+                args.swap_mode in ('both', 'words-only'),
+                args.pad_to)
+
+        # Return the most serious error code we encountered
+        except (IOError, OSError) as err:
+            retcode = max(retcode, 10)
+            log.error("Error while trying to read file: %s\n\t%s", path, err)
+        except FileTooBig as err:
+            retcode = max(retcode, 20)
+            log.error("File is too big to be an N64 save dump: %s", path)
+        except FileIncomplete as err:
+            retcode = max(retcode, 30)
+            log.error("File is incompatible with requested swap: %s", path)
+
+    if retcode != 0:
+        sys.exit(retcode)
 
 # ---=== Test cases (run using `py.test saveswap.py`) ===---
 #  (They rely on helpers like `tmpdir` provided by py.test)
