@@ -350,13 +350,15 @@ def test_swap_bytes_with_incomplete(tmpdir):
 
     # Define a function which will be called for each combination of inputs
     def test_callback(_bytes, _words, pad_to):
+        # Test that both types of swapping error out on odd-numbered lengths
         test_file.write("12345")
-        with pytest.raises(FileIncomplete):
-            swap_bytes(str(test_file), _bytes, _words, pad_to)
-            assert test_file.stat().size == max(5, pad_to)
+        if _bytes or _words:
+            with pytest.raises(FileIncomplete):
+                swap_bytes(str(test_file), _bytes, _words, pad_to)
+                assert test_file.stat().size == max(5, pad_to)
 
         test_file.write("123456")
-        if _bytes:
+        if _words:
             with pytest.raises(FileIncomplete):
                 swap_bytes(str(test_file), _bytes, _words, pad_to)
                 assert test_file.stat().size == max(6, pad_to)
