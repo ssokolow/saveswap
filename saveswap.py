@@ -1,19 +1,228 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""[application description here]"""
+"""N64 save memory byte-swapping tool
+
+A simple utility to translate among the SRAM/EEPROM/Flash dump formats for
+Nintendo 64 cartridges as supported by various dumpers, emulators, and flash
+cartridges.
+
+--snip--
+
+A simple Python reimplementation of saturnu's ED64-Saveswap utility as posted
+at https://github.com/sanni/cartreader/tree/master/extras/saveswap
+
+The purpose of this tool is to achieve the following additional goals:
+1. Be scriptable
+2. Also run on non-Windows platforms
+3. Don't trigger false positives for malware on VirusTotal.com
+
+I have chosen the name "N64-Saveswap" in recognition that the EverDrive 64
+is not the only piece of hardware which may require the use of this tool
+and to avoid confusion with saturnu's original utility.
+
+While I did not engage in clean-room reverse-engineering, I believe this to be
+its own work in the eyes of the law for the following combination of reasons:
+
+1. Not only is the code in an entirely different language and relying heavily
+   on constructs which AutoIt's scripting language has no equivalent for,
+   the similarities which do exist are so fundamental to the task being
+   performed that they CANNOT be eliminated.
+
+   (eg. Yes, I swap bytes and pad files, but even those basic operations are
+    done differently, owing to flaws and ugliness in AutoIt's language which
+    I was able to avoid in Python.)
+
+2. My efforts to replicate the program's UI have been done entirely by working
+   from the screenshots in this thread:
+   http://krikzz.com/forum/index.php?topic=1396.0
+
+Copyright 2017 Stephan Sokolow
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
 
 from __future__ import (absolute_import, division, print_function,
                         with_statement, unicode_literals)
 
-__author__ = "Stephan Sokolow (deitarion/SSokolow)"
-__appname__ = "[application name here]"
+__author__ = "Stephan Sokolow"
+__license__ = "MIT"
+__appname__ = "N64-Saveswap"
 __version__ = "0.0pre0"
-__license__ = "GNU GPL 3.0 or later"
 
-import logging
+# A list of valid dump sizes, used for safety checks and padding
+VALID_SIZES = [512, 2048, 32768, 131072]
+
+import logging, os, shutil, sys, textwrap
 log = logging.getLogger(__name__)
 
-# -- Code Here --
+# A little safety guard against programmer error
+assert all(x % 4 == 0 for x in VALID_SIZES), "VALID_SIZES contains bad value"
+VALID_SIZES.sort()
+
+class FileTooBig(Exception):
+    """Exception raised for files bigger than the last entry in VALID_SIZES"""
+
+class FileIncomplete(Exception):
+    """Exception raised for files not a multiple of the swap increment."""
+
+def rejoin_bytes(sequence):
+    """Workaround for b''.join() not accepting the output of iterating bytes
+    objects in Python 3.x and bytes(sequence) not having the desired effect
+    in Python 2.x.
+
+    ...just be thankful I didn't get fed up enough to use
+    .decode('latin1') and .encode('latin1') to side-step it by pretending that
+    the Unicode codepoints corresponding to the latin-1 encoding are raw byte
+    values.
+
+    (Not a good idea if you can avoid it, because it wastes memory supporting
+     values you'll never use, wastes CPU time converting both ways, and, if you
+     pick an encoding that can't represent all 256 possible byte values or
+     accidentally introduce Unicode values that can't be mapped back, you'll
+     set yourself up for unpleasant surprises.)
+    """
+    if sys.version_info.major < 3:
+        return b''.join(sequence)
+    else:
+        return bytes(sequence)
+
+def calculate_padding(path):
+    """Calculate the size that a dump file should be padded to.
+
+    :Parameters:
+      path : `str`
+        The path to the file to be rewritten.
+
+    :rtype: `int`
+    :returns: The target file size after padding
+
+    :raises OSError: ``path`` does not exist.
+    :raises FileTooBig: The file is already bigger than the largest valid size.
+    """
+    # Get the file size in bytes or raise OSError
+    file_size = os.path.getsize(path)
+
+    # Walking from smallest to largest (see definition of VALID_SIZES),
+    # return the first value from VALID_SIZES that matches or exceeds
+    # the file's current size
+    for size in VALID_SIZES:
+        if size >= file_size:
+            return size
+
+    # If we got this far, file_size is bigger than the biggest size in the list
+    raise FileTooBig("File already exceeds largest valid size."
+            "({} > {})".format(file_size, VALID_SIZES[-1]))
+
+def swap_bytes(path, swap_bytes=True, swap_words=True, pad_to=0):
+    """Perform requested swapping operations on the given file.
+
+    A backup file will be generated by appending ``.bak`` to the path.
+
+    :Parameters:
+      path : `str`
+        The path to the file to be rewritten.
+      swap_bytes : `bool`
+        If ``True``, treat the file as a sequence of 16-bit words and swap
+        their endianness.
+      swap_words : `bool`
+        If ``True`` treat the file as a sequence of 32-bit words made of 16-bit
+        components and swap those. May be combined with ``swap_bytes`` for a
+        traditional "reverse the endianness of 32-bit words made of bytes"
+        operation.
+      pad_to : `int`
+        If specified, append null bytes before writing to ensure the file is
+        at least this length.
+
+    :raises TypeError: The value of ``path`` cannot be concatenated.
+    :raises IOError: Failure when attempting to read/write a file.
+    :raises FileIncomplete:
+        The length of the file isn't a multiple of the requested swapping
+        increment.
+    """
+    bak_path = path + '.bak'
+
+    # Don't get fancy. Just let a well-tested routine make our backup
+    # (copy2 also preserves metadata like modification date)
+    shutil.copy2(path, bak_path)
+
+    # Given how small these are, let's just load the entire thing into memory,
+    # manipulate it there, and then write the whole thing out again.
+    #
+    # It's less error-prone and it's (comparatively) slow to keep switching
+    # into the OS kernel for a lot of little read() calls.
+    with open(path, 'rb') as fobj_in:
+        data = fobj_in.read()
+
+    # OK, this is a little fancy, so I'll explain the parts in detail:
+    #
+    #   [0::4] means "take every fourth character starting with the first.
+    #   [1::4] means "take every fourth character starting with the second.
+    #     "123412341234" becomes "111" and "222" and so on.
+    #
+    #   zip() turns a list of rows into a list of columns
+    #     [["4","4","4"], ["3","3","3"], ["2","2","2"], ["1","1","1"]]
+    #       becomes
+    #     [["4","3","2","1"], ["4","3","2","1"], ["4","3","2","1"]]
+    #
+    #   b''.join() turns a list of bytestrings into a single bytestring,
+    #   using "nothing" as the separator. ('' and "" are interchangeable)
+    #     ["4", "3", "2", "1"] -> "4321"
+    #
+    #   The whole line is a "list comprehension" and is equivalent to:
+    #     output2 = []
+    #     for x in output:
+    #         output2.append(b''.join(x))
+    #     output = b''.join(output2)
+    #
+    # TODO: Are these files ALWAYS supposed to be multiples of 4 bytes when
+    #       dumped? If so, I should enforce that unconditionally to catch
+    #       corruption as broadly as possible.
+    file_len = len(data)
+    if swap_bytes:
+        if not file_len % 2 == 0:
+            raise FileIncomplete("File length is not divisible by 2: {}"
+                                 "".format(file_len))
+        data = zip(data[1::2], data[0::2])
+        data = b''.join([rejoin_bytes(x) for x in data])
+
+    if swap_words:
+        if not file_len % 4 == 0:
+            raise FileIncomplete("File length is not divisible by 4: {}"
+                                 "".format(file_len))
+        data = zip(data[2::4], data[3::4], data[0::4], data[1::4])
+        data = b''.join([rejoin_bytes(x) for x in data])
+
+    # Now, apply padding if requested
+    #
+    # In Python, multiplying a string by an int repeats the string.
+    #   'Foo' * 3 -> 'FooFooFoo'
+    if pad_to > file_len:
+        data = data + (b'\x00' * (pad_to - file_len))
+
+    # Now, overwrite the old data with the new data
+    #
+    # The file will automatically be wiped clean when calling open() with
+    # 'w' in the mode and this, while not infallible, is hard to screw up
+    # because we only open the file after all the tricky bits are done.
+    #
+    with open(path, 'wb') as fobj_out:
+        fobj_out.write(data)
 
 def main():
     """The main entry point, compatible with setuptools entry points."""
@@ -25,20 +234,41 @@ def main():
         reload(sys)
         sys.setdefaultencoding('utf-8')  # pylint: disable=no-member
 
-    from argparse import ArgumentParser, RawTextHelpFormatter
-    parser = ArgumentParser(formatter_class=RawTextHelpFormatter,
-            description=__doc__.replace('\r\n', '\n').split('\n--snip--\n')[0])
-    parser.add_argument('--version', action='version',
-            version="%%(prog)s v%s" % __version__)
-    parser.add_argument('-v', '--verbose', action="count",
-        default=2, help="Increase the verbosity. Use twice for extra effect")
-    parser.add_argument('-q', '--quiet', action="count",
-        default=0, help="Decrease the verbosity. Use twice for extra effect")
-    # Reminder: %(default)s can be used in help strings.
+    # Define a command-line argument parser which handles things like --help
+    # and enforcing requirements for what arguments must be provided
+    from argparse import ArgumentParser, RawDescriptionHelpFormatter
+    parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter,
+        description=__doc__.replace('\r\n', '\n').split('\n--snip--\n')[0],
+        epilog=textwrap.dedent("""
+            The swap modes behave as follows:
 
+                      both: 12 34 -> 43 21
+                bytes-only: 12 34 -> 21 43
+                words-only: 12 34 -> 34 12
+            """))
+
+    parser.add_argument('--version', action='version',
+        version="%%(prog)s v%s" % __version__)
+    parser.add_argument('-v', '--verbose', action="count",
+        default=2, help="Increase the verbosity. Use twice for extra effect.")
+    parser.add_argument('-q', '--quiet', action="count",
+        default=0, help="Decrease the verbosity. Use twice for extra effect.")
+
+    parser.add_argument('--swap-mode', action="store", default='both',
+        choices=('both', 'bytes-only', 'words-only'),
+        help="Set the type of byte-swapping to be performed.")
+    parser.add_argument('--force-padding', action="store", dest="pad_to",
+        metavar="NEW_SIZE", default=None, type=int,
+        help="Override autodetected padding size. This also disables the "
+             " associated safety checks, allowing this tool to be used on "
+             " other types of files. Specify 0 to disable padding entirely.")
+    parser.add_argument('path', nargs='+',
+        help="One or more Nintendo 64 save memory dumps to byte-swap")
+
+    # Parse the command-line
     args = parser.parse_args()
 
-    # Set up clean logging to stderr
+    # Set up clean logging to stderr which listens to -v and -q
     log_levels = [logging.CRITICAL, logging.ERROR, logging.WARNING,
                   logging.INFO, logging.DEBUG]
     args.verbose = min(args.verbose - args.quiet, len(log_levels) - 1)
@@ -46,8 +276,88 @@ def main():
     logging.basicConfig(level=log_levels[args.verbose],
                         format='%(levelname)s: %(message)s')
 
+    for path in args.path:
+        if args.pad_to:
+            pad_to = args.pad_to
+        elif args.pad_to is None:
+            pad_to = calculate_padding(path)
+        else:
+            pad_to = 0
 
+        swap_bytes(path, args.swap_bytes, args.swap_words, pad_to)
 
+# --== Test cases (run using `py.test saveswap.py`) ==--
+# (They rely on helpers like `tmpdir` provided by py.test)
+
+def test_calculate_padding(tmpdir):
+    """calculate_padding works as expected"""
+    import pytest
+    test_file = tmpdir.join("fake_dump")
+
+    test_file.write("1234" * 100)
+    assert calculate_padding(str(test_file)) == 512
+    test_file.write("1234" * 500)
+    assert calculate_padding(str(test_file)) == 2048
+    test_file.write("1234" * 1000)
+    assert calculate_padding(str(test_file)) == 32768
+    test_file.write("1234" * 10000)
+    assert calculate_padding(str(test_file)) == 131072
+
+    test_file.write("1234" * 100000)
+    with pytest.raises(FileTooBig):
+        calculate_padding(str(test_file))
+
+def test_swap_bytes(tmpdir):
+    import pytest
+    test_file = tmpdir.join("fake_dump")
+
+    test_file.write("1234" * 10)
+    swap_bytes(str(test_file))
+    assert test_file.read() == "4321" * 10
+
+    test_file.write("1234" * 10)
+    swap_bytes(str(test_file), swap_bytes=False)
+    assert test_file.read() == "3412" * 10
+
+    test_file.write("1234" * 10)
+    swap_bytes(str(test_file), swap_words=False)
+    assert test_file.read() == "2143" * 10
+
+    test_file.write("1234" * 10)
+    swap_bytes(str(test_file), swap_bytes=False, swap_words=False)
+    assert test_file.read() == "1234" * 10
+
+def test_swap_bytes_with_incomplete(tmpdir):
+    """swap_bytes reacts properly to file sizes with remainders"""
+    import pytest
+    test_file = tmpdir.join("fake_dump")
+
+    # Define a function which will be called for each combination of inputs
+    def test_callback(_bytes, _words, pad_to):
+        test_file.write("12345")
+        with pytest.raises(FileIncomplete):
+            swap_bytes(str(test_file), _bytes, _words, pad_to)
+            assert test_file.stat().size == max(5, pad_to)
+
+        test_file.write("123456")
+        if _bytes:
+            with pytest.raises(FileIncomplete):
+                swap_bytes(str(test_file), _bytes, _words, pad_to)
+                assert test_file.stat().size == max(6, pad_to)
+        else:
+            swap_bytes(str(test_file), False, _words, pad_to)
+
+    # Let _vary_check_swap_inputs call test_callback once for each combination
+    _vary_check_swap_inputs(test_callback)
+
+def _vary_check_swap_inputs(callback):
+    """Helper to avoid duplicating stuff common between test_swap_bytes*"""
+    for _bytes in (True, False):
+        for _words in (True, False):
+            for _padding in (0, 1000, 2048):
+                callback(_bytes, _words, _padding)
+
+# If we're being run directly rather than `import`-ed, run the code in `main()`
 if __name__ == '__main__':
     main()
 
