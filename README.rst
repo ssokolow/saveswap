@@ -2,6 +2,12 @@
 N64-Saveswap
 ============
 
+.. image:: https://travis-ci.org/ssokolow/saveswap.svg?branch=master
+   :target: https://travis-ci.org/ssokolow/saveswap
+.. image:: https://coveralls.io/repos/github/ssokolow/saveswap/badge.svg?branch=master
+   :target: https://coveralls.io/github/ssokolow/saveswap?branch=master
+
+
 A simple command-line utility for manipulating the endianness of (A.K.A.
 byte-swapping) Nintendo 64 save data so it can be moved between various
 cartridge-dumping tools, emulators, flash cartridges, etc.
