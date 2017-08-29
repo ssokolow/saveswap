@@ -1,0 +1,20 @@
+dist: trusty
+sudo: false
+cache: pip
+language: python
+python:
+  - "2.7"
+  - "3.2"
+  - "3.3"
+  - "3.4"
+  - "3.5"
+  - "pypy"
+  - "pypy3"
+install:
+  - pip install coveralls pytest-cov
+  - if [[ $TRAVIS_PYTHON_VERSION == 3* ]]; then pip3 install mypy; fi
+script:
+  - py.test --cov-branch --cov=. --cov-report=term-missing
+  - if [[ $TRAVIS_PYTHON_VERSION == 3* ]]; then mypy --py2 --strict-optional --ignore-missing-imports ./*.py; fi
+  - if [[ $TRAVIS_PYTHON_VERSION == 3* ]]; then mypy --strict-optional --ignore-missing-imports ./*.py; fi
+after_success: coveralls
