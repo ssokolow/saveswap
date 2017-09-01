@@ -9,6 +9,9 @@ N64-Saveswap
 .. image:: https://landscape.io/github/ssokolow/saveswap/master/landscape.svg?style=flat
    :target: https://landscape.io/github/ssokolow/saveswap/master
    :alt: Code Health
+.. image:: https://scrutinizer-ci.com/g/ssokolow/saveswap/badges/quality-score.png?b=master
+   :target: https://scrutinizer-ci.com/g/ssokolow/saveswap/?branch=master
+   :alt: Scrutinizer Code Quality
 
 A simple command-line utility for manipulating the endianness of (A.K.A.
 byte-swapping) Nintendo 64 save data so it can be moved between various
