@@ -12,9 +12,20 @@ __appname__ = "N64-Saveswap"
 __version__ = "0.0pre0"
 
 import os, sys
+from contextlib import contextmanager
 
 from saveswap import (calculate_padding, byteswap, main, process_path,
                       FileIncomplete, FileTooBig)
+
+@contextmanager
+def set_argv(args):
+    """Context manager to temporarily modify sys.argv"""
+    old_argv = sys.argv
+    try:
+        sys.argv = [sys.argv[0]] + [str(x) for x in args]
+        yield
+    finally:
+        sys.argv = old_argv
 
 def test_calculate_padding(tmpdir):
     """Test that calculate_padding works as expected"""
@@ -78,8 +89,8 @@ def test_byteswap_with_incomplete(tmpdir):
     # Let _vary_check_swap_inputs call test_callback once for each combination
     _vary_check_swap_inputs(test_callback)
 
-def test_process_path(tmpdir):
-    """Test that process_path reacts to padding arguments properly"""
+def test_process_path_autopad_error(tmpdir):
+    """Test that process_path reacts to pad_to=None properly on error"""
     import pytest
     test_file = tmpdir.join("fake_dump")
     backup_path = str(test_file) + '.bak'
@@ -91,29 +102,40 @@ def test_process_path(tmpdir):
     assert test_file.read() == "1234" * 100000  # Unchanged on error
     assert not os.path.exists(backup_path)      # No backup on oversize
 
-    test_file.write("1234" * 100000)
-    process_path(str(test_file), pad_to=0)
-    assert test_file.read() == "4321" * 100000
-    assert os.path.exists(backup_path)
+def test_process_path_padding(tmpdir):
+    """Test that process_path pads properly"""
+    import pytest
+    test_file = tmpdir.join("fake_dump")
+    backup_path = str(test_file) + '.bak'
 
-    os.remove(backup_path)
     test_file.write("1234" * 100000)
     process_path(str(test_file), pad_to=500000)
     assert test_file.read() == ("4321" * 100000) + ("\x00" * 100000)
     assert os.path.exists(backup_path)
 
-def check_main_retcode(code):
+def test_process_path_nopad(tmpdir):
+    """Test that process_path reacts to pad_to=0 properly"""
+    import pytest
+    test_file = tmpdir.join("fake_dump")
+    backup_path = str(test_file) + '.bak'
+
+    test_file.write("1234" * 100000)
+    process_path(str(test_file), pad_to=0)
+    assert test_file.read() == "4321" * 100000
+    assert os.path.exists(backup_path)
+
+def check_main_retcode(args, code):
     """Helper for testing return codes from main()"""
     try:
-        main()
+        with set_argv(args):
+            main()
     except SystemExit as err:
         assert err.code == code
 
 def test_main_works(tmpdir):
-    """Functional test for main() functioning"""
+    """Functional test for basic main() use"""
     test_file = tmpdir.join("fake_dump")
     backup_path = str(test_file) + '.bak'
-    old_argv = sys.argv
 
     # Test successful runs
     for pat_reps, options, expect_pat, expect_len, backup in (
@@ -125,32 +147,34 @@ def test_main_works(tmpdir):
             (100000, ['--force-padding=500000'], '4321', 500000, True)):
 
         bkopt = [] if backup else ['--no-backup']
-        sys.argv = [old_argv[0]] + options + bkopt + [str(test_file)]
         test_file.write("1234" * pat_reps)
-        main()
+        with set_argv(options + bkopt + [test_file]):
+            main()
         assert test_file.read() == (expect_pat * pat_reps) + (
             "\x00" * (expect_len - (4 * pat_reps)))
         if backup:
             assert os.path.exists(backup_path)
             os.remove(backup_path)
 
-    # Test error returns
+def test_main_missing_file(tmpdir):
+    """Functional test for main() with nonexistant path"""
     missing_path = str(tmpdir.join("missing_file"))
-    sys.argv = [old_argv[0], missing_path]
-    check_main_retcode(10)
+    check_main_retcode([missing_path], 10)
     assert not os.path.exists(missing_path + '.bak')
+
+def test_main_error_returns(tmpdir):
+    """Functional test for main() with erroring input"""
+    test_file = tmpdir.join("fake_dump")
+    backup_path = str(test_file) + '.bak'
 
     assert not os.path.exists(backup_path)
     test_file.write("1234" * 100000)  # Too big
-    sys.argv = [old_argv[0], str(test_file)]
-    check_main_retcode(20)
+    check_main_retcode([test_file], 20)
     assert not os.path.exists(backup_path)
 
     test_file.write("12345")          # Not evenly disible by 2
-    sys.argv = [old_argv[0], str(test_file)]
-    check_main_retcode(30)
-
-    sys.argv = old_argv
+    check_main_retcode([test_file], 30)
+    # TODO: Fix the code so the backup is removed on this failure
 
 def _vary_check_swap_inputs(callback):
     """Helper to avoid duplicating stuff within test_byteswap_with_incomplete
