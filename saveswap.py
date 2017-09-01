@@ -72,6 +72,11 @@ VALID_SIZES = [512, 2048, 32768, 131072]
 import logging, os, shutil, sys, textwrap
 log = logging.getLogger(__name__)
 
+if sys.version_info.major > 2:  # pragma: nocover
+    def reload(_):  # pylint: disable=redefined-builtin
+        """Silence a spurious 'Undefined variable' error in Landscape.io"""
+        pass
+
 # A little safety guard against programmer error
 assert all(x % 4 == 0 for x in VALID_SIZES), "VALID_SIZES contains bad value"
 VALID_SIZES.sort()

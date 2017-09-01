@@ -6,7 +6,9 @@ N64-Saveswap
    :target: https://travis-ci.org/ssokolow/saveswap
 .. image:: https://coveralls.io/repos/github/ssokolow/saveswap/badge.svg?branch=master
    :target: https://coveralls.io/github/ssokolow/saveswap?branch=master
-
+.. image:: https://landscape.io/github/ssokolow/saveswap/master/landscape.svg?style=flat
+   :target: https://landscape.io/github/ssokolow/saveswap/master
+   :alt: Code Health
 
 A simple command-line utility for manipulating the endianness of (A.K.A.
 byte-swapping) Nintendo 64 save data so it can be moved between various
