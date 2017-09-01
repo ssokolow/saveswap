@@ -147,6 +147,13 @@ def calculate_padding(path):  # type: (str) -> int
     raise FileTooBig("File already exceeds largest valid size."
             "({} > {})".format(file_size, VALID_SIZES[-1]))
 
+def assert_stride(data, stride_len):
+    """Helper to deduplicate check that data length is a multiple of an int"""
+    file_len = len(data)
+    if not file_len % stride_len == 0:
+        raise FileIncomplete("File length is not divisible by {}: {}"
+                             "".format(stride_len, file_len))
+
 def byteswap(path, swap_bytes=True, swap_words=True, pad_to=0):
     # type: (str, bool, bool, int) -> None
     """Perform requested swapping operations on the given file.
@@ -212,16 +219,12 @@ def byteswap(path, swap_bytes=True, swap_words=True, pad_to=0):
     #       corruption as broadly as possible.
     file_len = len(data)
     if swap_bytes:
-        if not file_len % 2 == 0:
-            raise FileIncomplete("File length is not divisible by 2: {}"
-                                 "".format(file_len))
+        assert_stride(data, 2)
         data = zip(data[1::2], data[0::2])  # type: ignore
         data = b''.join([rejoin_bytes(x) for x in data])
 
     if swap_words:
-        if not file_len % 4 == 0:
-            raise FileIncomplete("File length is not divisible by 4: {}"
-                                 "".format(file_len))
+        assert_stride(data, 4)
         data = zip(data[2::4], data[3::4],  # type: ignore
                    data[0::4], data[1::4])
         data = b''.join([rejoin_bytes(x) for x in data])
