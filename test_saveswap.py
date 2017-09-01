@@ -104,7 +104,6 @@ def test_process_path_autopad_error(tmpdir):
 
 def test_process_path_padding(tmpdir):
     """Test that process_path pads properly"""
-    import pytest
     test_file = tmpdir.join("fake_dump")
     backup_path = str(test_file) + '.bak'
 
@@ -115,7 +114,6 @@ def test_process_path_padding(tmpdir):
 
 def test_process_path_nopad(tmpdir):
     """Test that process_path reacts to pad_to=0 properly"""
-    import pytest
     test_file = tmpdir.join("fake_dump")
     backup_path = str(test_file) + '.bak'
 
