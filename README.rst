@@ -6,9 +6,6 @@ N64-Saveswap
    :target: https://travis-ci.org/ssokolow/saveswap
 .. image:: https://coveralls.io/repos/github/ssokolow/saveswap/badge.svg?branch=master
    :target: https://coveralls.io/github/ssokolow/saveswap?branch=master
-.. image:: https://landscape.io/github/ssokolow/saveswap/master/landscape.svg?style=flat
-   :target: https://landscape.io/github/ssokolow/saveswap/master
-   :alt: Code Health
 .. image:: https://scrutinizer-ci.com/g/ssokolow/saveswap/badges/quality-score.png?b=master
    :target: https://scrutinizer-ci.com/g/ssokolow/saveswap/?branch=master
    :alt: Scrutinizer Code Quality
