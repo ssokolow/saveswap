@@ -39,6 +39,27 @@ have to run in Wine to use on Linux.
 Usage
 -----
 
+For basic conversion of a save memory dump file, the default settings should do
+perfectly well and usage is as follows:
+
+1. Make sure you have a `Python runtime <https://www.python.org/downloads/>`_
+   installed.
+2. Run ``saveswap.py`` with the path to the save dump as its argument.
+
+On Windows, that may look like this:
+
+1. Install the Windows version of Python.
+2. Copy the save dump into the same folder as ``saveswap.py``.
+3. Open a terminal/command window (eg. ``cmd.exe``) in that directory.
+4. Run ``saveswap.py NAME_OF_DUMP_FILE``
+
+::
+
+    C:\Users\Me> cd Desktop
+    C:\Users\Me\Desktop> saveswap.py MyNintendyGame.eep
+
+For more advanced functions, please consult the ``--help`` output:
+
 ::
 
     usage: saveswap.py [-h] [--version] [-v] [-q]
